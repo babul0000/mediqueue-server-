@@ -20,7 +20,6 @@ const client = new MongoClient(uri, {
     }
 });
 
-
 const JWKS = createRemoteJWKSet(
     new URL(`${process.env.CLIENT_URL || 'http://localhost:3000'}/api/auth/jwks`)
 )
@@ -47,20 +46,13 @@ async function run() {
     try {
         const db = client.db('mediqueue')
 
-
-
         const tutorCollection = db.collection('tutor')
         const bookingCollection = db.collection('booking')
-
-
-
 
         app.get('/tutor', async (req, res) => {
             const result = await tutorCollection.find().toArray()
             res.status(200).json(result)
         })
-
-
 
         app.post('/add-tutor', async (req, res) => {
             const addTutor = req.body
@@ -68,20 +60,16 @@ async function run() {
             res.status(201).json(result)
         })
 
-
-
         app.get('/tutor/:id', async (req, res) => {
             const { id } = req.params
             const result = await tutorCollection.findOne({ _id: new ObjectId(id) })
             res.status(200).json(result)
         })
 
-
         app.patch('/tutor/:id/decrease-slot', async (req, res) => {
             try {
                 const id = req.params.id;
                 const filter = { _id: new ObjectId(id) };
-
 
                 const updateDoc = {
                     $inc: { totalSlot: -1 }
@@ -99,14 +87,31 @@ async function run() {
         app.post('/add-booking', async (req, res) => {
             try {
                 const bookingData = req.body;
-                const result = await bookingCollection.insertOne(bookingData);
-                res.status(200).json(result);
-            } catch (error) {
+                const query = { _id: new ObjectId(bookingData.tutorId) };
 
-                res.status(400).json({ error: "Failed to create booking" });
+
+                const tutor = await tutorCollection.findOne(query);
+
+
+                if (!tutor || tutor.totalSlot <= 0) {
+                    return res.status(400).json({ message: "This session is fully booked. You can’t join at the moment." });
+                }
+
+
+                if (new Date() < new Date(tutor.sessionDate)) {
+                    return res.status(400).json({ message: "Booking is not available yet for this tutor" });
+                }
+                const result = await bookingCollection.insertOne(bookingData);
+await tutorCollection.updateOne(query, { $inc: { totalSlot: -1 } });
+
+
+                res.status(200).json({ success: true, message: "Your booking has been confirmed successfully!", result });
+                
+            } catch (error) {
+                console.error("Booking Error:", error);
+                res.status(500).json({ error: "Failed to create booking" });
             }
         });
-
 
         app.get('/my-bookings', async (req, res) => {
             try {
@@ -120,7 +125,6 @@ async function run() {
 
         app.patch('/booking/:bookingId', async (req, res) => {
             const { bookingId } = req.params
-
 
             const result = await bookingCollection.updateOne(
                 { _id: new ObjectId(bookingId) },
