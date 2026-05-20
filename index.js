@@ -51,12 +51,12 @@ async function run() {
 
 
 
-app.get('/my-tutors/:email', async (req, res) => {
-    const email = req.params.email;
-    const query = { email: email };
-    const result = await tutorCollection.find(query).toArray();
-    res.status(200).json(result);
-});
+        app.get('/my-tutors/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email };
+            const result = await tutorCollection.find(query).toArray();
+            res.status(200).json(result);
+        });
 
 
         app.get('/tutor', async (req, res) => {
@@ -76,22 +76,35 @@ app.get('/my-tutors/:email', async (req, res) => {
             res.status(200).json(result)
         })
 
-        app.patch('/tutor/:id/decrease-slot', async (req, res) => {
+
+        app.delete('/tutor/:id', async (req, res) => {
             try {
-                const id = req.params.id;
-                const filter = { _id: new ObjectId(id) };
+                const result = await tutorCollection.deleteOne({ _id: new ObjectId(req.params.id) });
 
-                const updateDoc = {
-                    $inc: { totalSlot: -1 }
-                };
-
-                const result = await tutorCollection.updateOne(filter, updateDoc);
-                res.status(200).json(result);
+                result.deletedCount === 1
+                    ? res.status(200).json({ message: "Successfully deleted" })
+                    : res.status(404).json({ message: "Tutor not found" });
             } catch (error) {
-                console.error("Decrease slot error:", error);
-                res.status(500).json({ error: "Failed to decrease slot or invalid ID" });
+                res.status(500).json({ message: "Failed to delete" });
             }
         });
+
+
+        app.put('/tutor/:id', async (req, res) => {
+            const { id } = req.params;
+            const updatedData = req.body;
+            delete updatedData._id;
+
+            const result = await tutorCollection.updateOne(
+                { _id: new ObjectId(id) },
+                { $set: updatedData }
+            );
+
+            result.matchedCount > 0
+                ? res.status(200).json({ message: "Successfully updated" })
+                : res.status(404).json({ message: "Tutor not found" });
+        });
+
 
 
         app.post('/add-booking', async (req, res) => {
@@ -112,11 +125,11 @@ app.get('/my-tutors/:email', async (req, res) => {
                     return res.status(400).json({ message: "Booking is not available yet for this tutor" });
                 }
                 const result = await bookingCollection.insertOne(bookingData);
-await tutorCollection.updateOne(query, { $inc: { totalSlot: -1 } });
+                await tutorCollection.updateOne(query, { $inc: { totalSlot: -1 } });
 
 
                 res.status(200).json({ success: true, message: "Your booking has been confirmed successfully!", result });
-                
+
             } catch (error) {
                 console.error("Booking Error:", error);
                 res.status(500).json({ error: "Failed to create booking" });
@@ -124,57 +137,57 @@ await tutorCollection.updateOne(query, { $inc: { totalSlot: -1 } });
         });
 
 
-app.get('/my-bookings', async (req, res) => {
-    try {
-        const email = req.query.email;
-        let query = { status: { $ne: 'cancelled' } };
-        
-        if (email) {
-            query.email = email;
-        }
-        const result = await bookingCollection.find(query).toArray();
-        res.status(200).json(result);
-    } catch (error) {
-        res.status(500).json({ error: "Failed to fetch bookings" });
-    }
-});
+        app.get('/my-bookings', async (req, res) => {
+            try {
+                const email = req.query.email;
+                let query = { status: { $ne: 'cancelled' } };
+
+                if (email) {
+                    query.email = email;
+                }
+                const result = await bookingCollection.find(query).toArray();
+                res.status(200).json(result);
+            } catch (error) {
+                res.status(500).json({ error: "Failed to fetch bookings" });
+            }
+        });
 
         app.patch('/booking/:bookingId', async (req, res) => {
-    try {
-        const { bookingId } = req.params;
-        const query = { _id: new ObjectId(bookingId) };
+            try {
+                const { bookingId } = req.params;
+                const query = { _id: new ObjectId(bookingId) };
 
 
-        const booking = await bookingCollection.findOne(query);
+                const booking = await bookingCollection.findOne(query);
 
-        if (!booking) {
-            return res.status(404).json({ error: "Booking not found" });
-        }
-
-
-        if (booking.status === 'cancelled') {
-            return res.status(400).json({ message: "This booking is already cancelled" });
-        }
+                if (!booking) {
+                    return res.status(404).json({ error: "Booking not found" });
+                }
 
 
-        const updateResult = await bookingCollection.updateOne(
-            query,
-            { $set: { status: 'cancelled' } }
-        );
+                if (booking.status === 'cancelled') {
+                    return res.status(400).json({ message: "This booking is already cancelled" });
+                }
 
 
-        if (updateResult.modifiedCount > 0 && booking.tutorId) {
-            const tutorQuery = { _id: new ObjectId(booking.tutorId) };
-            await tutorCollection.updateOne(tutorQuery, { $inc: { totalSlot: 1 } });
-        }
+                const updateResult = await bookingCollection.updateOne(
+                    query,
+                    { $set: { status: 'cancelled' } }
+                );
 
-        res.status(200).json({ success: true, message: "Booking cancelled and slot restored!", result: updateResult });
 
-    } catch (error) {
-        console.error("Cancel Booking Error:", error);
-        res.status(500).json({ error: "Failed to cancel booking due to server error" });
-    }
-});
+                if (updateResult.modifiedCount > 0 && booking.tutorId) {
+                    const tutorQuery = { _id: new ObjectId(booking.tutorId) };
+                    await tutorCollection.updateOne(tutorQuery, { $inc: { totalSlot: 1 } });
+                }
+
+                res.status(200).json({ success: true, message: "Booking cancelled and slot restored!", result: updateResult });
+
+            } catch (error) {
+                console.error("Cancel Booking Error:", error);
+                res.status(500).json({ error: "Failed to cancel booking due to server error" });
+            }
+        });
 
         console.log("Successfully connected to MongoDB!");
     } catch (error) {
