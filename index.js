@@ -49,6 +49,16 @@ async function run() {
         const tutorCollection = db.collection('tutor')
         const bookingCollection = db.collection('booking')
 
+
+
+app.get('/my-tutors/:email', async (req, res) => {
+    const email = req.params.email;
+    const query = { email: email };
+    const result = await tutorCollection.find(query).toArray();
+    res.status(200).json(result);
+});
+
+
         app.get('/tutor', async (req, res) => {
             const result = await tutorCollection.find().toArray()
             res.status(200).json(result)
@@ -113,26 +123,58 @@ await tutorCollection.updateOne(query, { $inc: { totalSlot: -1 } });
             }
         });
 
-        app.get('/my-bookings', async (req, res) => {
-            try {
-                const result = await bookingCollection.find().toArray();
-                res.status(200).json(result);
-            } catch (error) {
-                console.error("Fetch Bookings Error:", error);
-                res.status(500).json({ error: "Failed to fetch bookings" });
-            }
-        });
+
+app.get('/my-bookings', async (req, res) => {
+    try {
+        const email = req.query.email;
+        let query = { status: { $ne: 'cancelled' } };
+        
+        if (email) {
+            query.email = email;
+        }
+        const result = await bookingCollection.find(query).toArray();
+        res.status(200).json(result);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch bookings" });
+    }
+});
 
         app.patch('/booking/:bookingId', async (req, res) => {
-            const { bookingId } = req.params
+    try {
+        const { bookingId } = req.params;
+        const query = { _id: new ObjectId(bookingId) };
 
-            const result = await bookingCollection.updateOne(
-                { _id: new ObjectId(bookingId) },
-                { $set: { status: 'cancelled' } }
-            )
 
-            res.json(result)
-        })
+        const booking = await bookingCollection.findOne(query);
+
+        if (!booking) {
+            return res.status(404).json({ error: "Booking not found" });
+        }
+
+
+        if (booking.status === 'cancelled') {
+            return res.status(400).json({ message: "This booking is already cancelled" });
+        }
+
+
+        const updateResult = await bookingCollection.updateOne(
+            query,
+            { $set: { status: 'cancelled' } }
+        );
+
+
+        if (updateResult.modifiedCount > 0 && booking.tutorId) {
+            const tutorQuery = { _id: new ObjectId(booking.tutorId) };
+            await tutorCollection.updateOne(tutorQuery, { $inc: { totalSlot: 1 } });
+        }
+
+        res.status(200).json({ success: true, message: "Booking cancelled and slot restored!", result: updateResult });
+
+    } catch (error) {
+        console.error("Cancel Booking Error:", error);
+        res.status(500).json({ error: "Failed to cancel booking due to server error" });
+    }
+});
 
         console.log("Successfully connected to MongoDB!");
     } catch (error) {
