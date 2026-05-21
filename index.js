@@ -63,6 +63,10 @@ async function run() {
             const result = await tutorCollection.find().toArray()
             res.status(200).json(result)
         })
+        app.get('/tutor-home', async (req, res) => {
+            const result = await tutorCollection.find().limit(6).toArray()
+            res.status(200).json(result)
+        })
 
         app.post('/add-tutor', async (req, res) => {
             const addTutor = req.body
@@ -70,7 +74,7 @@ async function run() {
             res.status(201).json(result)
         })
 
-        app.get('/tutor/:id', async (req, res) => {
+        app.get('/tutor/:id', verifyToken, async (req, res) => {
             const { id } = req.params
             const result = await tutorCollection.findOne({ _id: new ObjectId(id) })
             res.status(200).json(result)
@@ -107,7 +111,7 @@ async function run() {
 
 
 
-        app.post('/add-booking', async (req, res) => {
+        app.post('/add-booking', verifyToken, async (req, res) => {
             try {
                 const bookingData = req.body;
                 const query = { _id: new ObjectId(bookingData.tutorId) };
@@ -137,7 +141,7 @@ async function run() {
         });
 
 
-        app.get('/my-bookings', async (req, res) => {
+        app.get('/my-bookings', verifyToken, async (req, res) => {
             try {
                 const email = req.query.email;
                 let query = { status: { $ne: 'cancelled' } };
